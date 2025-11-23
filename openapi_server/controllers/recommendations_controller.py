@@ -1,312 +1,290 @@
 import connexion
-from typing import Dict, Tuple, Union, List
-from collections import Counter # Importante para el algoritmo
-
-from openapi_server.models.like import Like
-from openapi_server.models.play import Play
-from openapi_server.models.track import Track
-from openapi_server.models.comment import Comment
-from openapi_server.models.rating import Rating
-from openapi_server import util
-
-# Cuando tengas la BD real, importarás:
-# from pymongo import MongoClient
+import psycopg2
+from psycopg2.extras import RealDictCursor
+import requests
+import os
+from datetime import datetime
 
 # ==============================================================================
-#  BASE DE DATOS TEMPORAL (MEMORIA RAM)
+#  CONFIGURACIÓN
 # ==============================================================================
-_PLAYS_DB = []
-_LIKES_DB = []
-_COMMENTS_DB = []
-_RATINGS_DB = []
+# URL del servicio de Contenidos 
+CONTENT_SERVICE_URL = os.getenv("CONTENT_SERVICE_URL", "http://localhost:8081")
 
+# Parámetros de conexión a la base de datos PostgreSQL
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = os.getenv("DB_PORT", "5435") # Puerto externo del docker
+DB_NAME = os.getenv("DB_NAME", "recomendaciones_db")
+DB_USER = os.getenv("DB_USER", "usuario")
+DB_PASS = os.getenv("DB_PASS", "123454321")
+
+def get_db_connection():
+    try:
+        conn = psycopg2.connect(
+            host=DB_HOST, port=DB_PORT, database=DB_NAME, user=DB_USER, password=DB_PASS
+        )
+        return conn
+    except Exception as e:
+        print(f"--> [ERROR CRÍTICO] DB Connection: {e}")
+        return None
 
 # ==============================================================================
-#  BLOQUE 1: REGISTRO DE ACTIVIDAD (PLAYS Y LIKES)
+#  HELPER: COMUNICACIÓN
+# ==============================================================================
+def _fetch_from_content(endpoint):
+    """Pide datos a Contenidos (Síncrono)"""
+    try:
+        url = f"{CONTENT_SERVICE_URL}{endpoint}"
+        response = requests.get(url, timeout=3)
+        if response.status_code == 200:
+            return response.json()
+    except Exception as e:
+        print(f"--> [ERROR HTTP] Fallo comunicación Contenidos ({endpoint}): {e}")
+    return None
+
+# ==============================================================================
+#  BLOQUE 1: INGESTIÓN DE DATOS (WRITES)
 # ==============================================================================
 
 def add_play(body):  
-    """Registrar una reproducción"""
+    """Registra una reproducción usando la secuencia de PostgreSQL."""
     if connexion.request.is_json:
-        play_obj = body 
+        play = body 
+        conn = get_db_connection()
+        if not conn: return "DB Connection Error", 500
         
-        # ----------------------------------------------------------------------
-        # TODO: CÓDIGO PARA MONGODB (FUTURO)
-        # client = MongoClient('mongodb://localhost:27017/')
-        # db = client['microservicio_recomendaciones']
-        # db.plays.insert_one(play_obj.to_dict())
-        # ----------------------------------------------------------------------
+        cur = conn.cursor()
+        try:
+            # SQL: Usamos nextval('plays_id_seq') para generar el ID de forma segura y atómica
+            # Si tu tabla se llama 'plays' y la secuencia 'plays_id_seq' (estándar en tu init.sql)
+            cur.execute("""
+                INSERT INTO plays (id, user_id, track_id, timestamp)
+                VALUES (nextval('public.plays_id_seq'), %s, %s, %s)
+            """, (play['user_id'], play['track_id'], datetime.now()))
+            
+            conn.commit()
+            print(f"--> [DB] Play guardado: User {play['user_id']} -> Track {play['track_id']}")
+        except Exception as e:
+            conn.rollback()
+            print(f"--> [ERROR SQL] {e}")
+            return "Error saving play", 500
+        finally:
+            cur.close()
+            conn.close()
+        
+    return "Play registered", 201
 
-        # FUNCIONALIDAD ACTUAL (MEMORIA):
-        _PLAYS_DB.append(play_obj)
-        print(f"--> Play registrada: User {play_obj.user_id}")
-        
-    return "Play registered successfully", 201
-
-def add_play(body):  
-    """Registrar una reproducción"""
-    if connexion.request.is_json:
-        # El body ya es el diccionario Python que contiene los datos del Play
-        play_obj = body 
-        
-        # ----------------------------------------------------------------------
-        # TODO: CÓDIGO PARA MONGODB (FUTURO)
-        # Aquí es donde, en el futuro, harías:
-        # db.plays.insert_one(play_obj)
-        # ----------------------------------------------------------------------
-        
-        # FUNCIONALIDAD ACTUAL (MEMORIA):
-        _PLAYS_DB.append(play_obj)
-        
-        # Corrección: Acceder con corchetes ['user_id']
-        print(f"--> [RECIBIDO] Play registrada en Python: User {play_obj['user_id']}")
-
-    return "Play registered successfully", 201
 
 def add_like(body): 
-    """Registrar un like"""
-    # Importamos connexion aquí si no está al inicio
-    import connexion 
-    
+    """Registra un like usando la secuencia de PostgreSQL."""
     if connexion.request.is_json:
-        like_obj = body
+        like = body
+        conn = get_db_connection()
+        if not conn: return "DB Connection Error", 500
         
-        # ----------------------------------------------------------------------
-        # TODO: CÓDIGO PARA MONGODB (FUTURO)
-        # db.likes.insert_one(like_obj)
-        # ----------------------------------------------------------------------
-        
-        # FUNCIONALIDAD ACTUAL (MEMORIA):
-        _LIKES_DB.append(like_obj)
-        
-        # IMPORTANTE: Usamos corchetes para acceder a los datos
-        print(f"--> [RECIBIDO] Like registrado en Python: User {like_obj['user_id']}")
+        cur = conn.cursor()
+        try:
+            # SQL: Usamos nextval('likes_id_seq')
+            cur.execute("""
+                INSERT INTO likes (id, user_id, track_id, timestamp)
+                VALUES (nextval('public.likes_id_seq'), %s, %s, %s)
+                ON CONFLICT (user_id, track_id) DO NOTHING
+            """, (like['user_id'], like['track_id'], datetime.now()))
+            
+            conn.commit()
+            print(f"--> [DB] Like guardado: User {like['user_id']} -> Track {like['track_id']}")
+        except Exception as e:
+            conn.rollback()
+            print(f"--> [ERROR SQL] {e}")
+            return "Error saving like", 500
+        finally:
+            cur.close()
+            conn.close()
 
-    return "Like registered successfully", 201
-
-def get_user_plays(id_user): 
-    """Obtener reproducciones de usuario"""
-    # ----------------------------------------------------------------------
-    # TODO: CÓDIGO PARA MONGODB (FUTURO)
-    # cursor = db.plays.find({"user_id": id_user})
-    # return [Play.from_dict(doc) for doc in cursor]
-    # ----------------------------------------------------------------------
-    return [p for p in _PLAYS_DB if p.user_id == id_user]
-
-
-def get_user_likes(id_user): 
-    """Obtener likes de usuario"""
-    # ----------------------------------------------------------------------
-    # TODO: CÓDIGO PARA MONGODB (FUTURO)
-    # cursor = db.likes.find({"user_id": id_user})
-    # return [Like.from_dict(doc) for doc in cursor]
-    # ----------------------------------------------------------------------
-    return [l for l in _LIKES_DB if l.user_id == id_user]
-
-
-def get_track_plays(id_track):
-    """Obtener reproducciones por canción"""
-    # ----------------------------------------------------------------------
-    # TODO: CÓDIGO PARA MONGODB (FUTURO)
-    # cursor = db.plays.find({"track_id": id_track})
-    # return [Play.from_dict(doc) for doc in cursor]
-    # ----------------------------------------------------------------------
-    return [p for p in _PLAYS_DB if p.track_id == id_track]
-
-
-def get_track_likes(id_track):
-    """Obtener likes por canción"""
-    # ----------------------------------------------------------------------
-    # TODO: CÓDIGO PARA MONGODB (FUTURO)
-    # cursor = db.likes.find({"track_id": id_track})
-    # return [Like.from_dict(doc) for doc in cursor]
-    # ----------------------------------------------------------------------
-    return [l for l in _LIKES_DB if l.track_id == id_track]
+    return "Like registered", 201
 
 
 # ==============================================================================
-#  BLOQUE 2: CRUD DE COMENTARIOS Y VALORACIONES (CON MODERACIÓN)
-# ==============================================================================
-
-def add_comment(body):
-    """Añadir un comentario (entra como 'pending')"""
-    if connexion.request.is_json:
-        comment_obj = Comment.from_dict(body)
-        comment_obj.status = 'pending'
-        
-        # ----------------------------------------------------------------------
-        # TODO: CÓDIGO PARA MONGODB (FUTURO)
-        # db.comments.insert_one(comment_obj.to_dict())
-        # ----------------------------------------------------------------------
-
-        _COMMENTS_DB.append(comment_obj)
-        print(f"--> Comentario pendiente: {comment_obj.content}")
-        
-    return "Comment added successfully. Pending moderation.", 201
-
-
-def get_track_comments(id_track):
-    """Obtener comentarios (Solo approved)"""
-    # ----------------------------------------------------------------------
-    # TODO: CÓDIGO PARA MONGODB (FUTURO)
-    # cursor = db.comments.find({"track_id": id_track, "status": "approved"})
-    # return [Comment.from_dict(doc) for doc in cursor]
-    # ----------------------------------------------------------------------
-    return [c for c in _COMMENTS_DB if c.track_id == id_track and c.status == 'approved']
-
-
-def moderate_comment(id_comment, action):
-    """Moderar comentario (Admin)"""
-    # ----------------------------------------------------------------------
-    # TODO: CÓDIGO PARA MONGODB (FUTURO)
-    # new_status = 'approved' if action == 'approve' else 'rejected'
-    # result = db.comments.update_one({"id": id_comment}, {"$set": {"status": new_status}})
-    # ----------------------------------------------------------------------
-
-    for comment in _COMMENTS_DB:
-        if comment.id == id_comment:
-            if action == 'approve':
-                comment.status = 'approved'
-                return "Comment approved", 200
-            elif action == 'reject':
-                comment.status = 'rejected'
-                return "Comment rejected", 200
-    return "Comment not found", 404
-
-
-def delete_comment(id_comment):
-    """Eliminar comentario"""
-    # ----------------------------------------------------------------------
-    # TODO: CÓDIGO PARA MONGODB (FUTURO)
-    # db.comments.delete_one({"id": id_comment})
-    # ----------------------------------------------------------------------
-    global _COMMENTS_DB
-    initial_len = len(_COMMENTS_DB)
-    _COMMENTS_DB = [c for c in _COMMENTS_DB if c.id != id_comment]
-    
-    if len(_COMMENTS_DB) < initial_len:
-        return "Comment deleted", 200
-    return "Comment not found", 404
-
-
-def add_rating(body):
-    """Añadir valoración (1-5)"""
-    if connexion.request.is_json:
-        rating_obj = Rating.from_dict(body)
-        if rating_obj.score < 1 or rating_obj.score > 5:
-            return "Score must be 1-5", 400
-
-        # ----------------------------------------------------------------------
-        # TODO: CÓDIGO PARA MONGODB (FUTURO)
-        # db.ratings.insert_one(rating_obj.to_dict())
-        # ----------------------------------------------------------------------
-        
-        _RATINGS_DB.append(rating_obj)
-    return "Rating added", 201
-
-
-def get_track_ratings(id_track):
-    """Obtener valoraciones"""
-    # ----------------------------------------------------------------------
-    # TODO: CÓDIGO PARA MONGODB (FUTURO)
-    # cursor = db.ratings.find({"track_id": id_track})
-    # return [Rating.from_dict(doc) for doc in cursor]
-    # ----------------------------------------------------------------------
-    return [r for r in _RATINGS_DB if r.track_id == id_track]
-
-
-# ==============================================================================
-#  BLOQUE 3: ALGORITMOS DE RECOMENDACIÓN Y MÉTRICAS
+#  BLOQUE 2: MÉTRICAS Y RECOMENDACIONES (READS)
 # ==============================================================================
 
 def get_top_tracks():
-    """
-    Devuelve el TOP 10 de canciones más escuchadas globalmente.
-    """
-    # ----------------------------------------------------------------------
-    # TODO: CÓDIGO PARA MONGODB (FUTURO)
-    # pipeline = [
-    #     {"$group": {"_id": "$track_id", "count": {"$sum": 1}}},
-    #     {"$sort": {"count": -1}},
-    #     {"$limit": 10}
-    # ]
-    # aggregation_result = list(db.plays.aggregate(pipeline))
-    # ... mapeo de resultados a objetos Track ...
-    # ----------------------------------------------------------------------
-
-    # FUNCIONALIDAD ACTUAL (MEMORIA):
-    all_ids = [p.track_id for p in _PLAYS_DB]
-    if not all_ids: return []
+    """Top 10 canciones más escuchadas."""
+    conn = get_db_connection()
+    if not conn: return []
+    cur = conn.cursor(cursor_factory=RealDictCursor)
     
-    counts = Counter(all_ids).most_common(10)
+    cur.execute("""
+        SELECT track_id, COUNT(*) as total_plays
+        FROM plays
+        GROUP BY track_id
+        ORDER BY total_plays DESC
+        LIMIT 10
+    """)
+    top_ids = cur.fetchall()
+    cur.close()
+    conn.close()
     
     result = []
-    for tid, count in counts:
-        # Simulamos recuperar título (esto vendría del MS Contenidos)
-        result.append(Track(id=tid, title=f"Hit Global ({count} plays)"))
+    for item in top_ids:
+        track_info = _fetch_from_content(f"/tracks/{item['track_id']}")
+        
+        track_data = {
+            "id": item['track_id'],
+            "plays": item['total_plays'],
+            "title": track_info['title'] if track_info else f"Track {item['track_id']}",
+            "artist_id": track_info.get('artist_id') if track_info else None
+        }
+        result.append(track_data)
+        
     return result
 
-
 def get_recommended_tracks(id_user, type=None):
-    """
-    Algoritmo de recomendación personalizado.
-    """
-    recs = []
-    print(f"Calculando recomendaciones tipo '{type}' para {id_user}")
+    """Recomendador Híbrido."""
+    conn = get_db_connection()
+    if not conn: return []
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    recommendations = []
     
-    if type == 'like':
-        # 1. Obtener likes del usuario
-        user_likes = [l.track_id for l in _LIKES_DB if l.user_id == id_user]
-        
-        if user_likes:
-            # ------------------------------------------------------------------
-            # TODO: MONGODB + LOGICA DE NEGOCIO
-            # Buscar canciones con tags/géneros similares a las liked_tracks
-            # ------------------------------------------------------------------
-            recs.append(Track(id="rec_sim_1", title="Similar a tus likes 1"))
-            recs.append(Track(id="rec_sim_2", title="Similar a tus likes 2"))
-        else:
-            return get_top_tracks() # Fallback si no hay likes
+    try:
+        if type == 'genre':
+            # 1. Sacar últimas canciones escuchadas (SQL)
+            cur.execute("""
+                SELECT track_id FROM plays 
+                WHERE user_id = %s 
+                ORDER BY timestamp DESC LIMIT 20
+            """, (id_user,))
+            recent_tracks = [row['track_id'] for row in cur.fetchall()]
             
-    elif type == 'genre':
-        # ----------------------------------------------------------------------
-        # TODO: MONGODB
-        # Analizar historial -> Obtener género top -> Buscar tracks de ese género
-        # ----------------------------------------------------------------------
-        recs.append(Track(id="gen_rock_1", title="Top Rock para ti"))
-        
-    elif type == 'subscription':
-        # ----------------------------------------------------------------------
-        # TODO: LLAMADA A MICROSERVICIO USUARIOS
-        # Obtener artistas seguidos -> Buscar novedades de esos artistas
-        # ----------------------------------------------------------------------
-        recs.append(Track(id="sub_artist_1", title="Novedad de Artista seguido"))
-        
-    else:
-        return get_top_tracks()
-        
-    return recs
+            if not recent_tracks: return get_top_tracks()
 
+            # 2. Buscar género favorito (HTTP a Contenidos)
+            from collections import Counter
+            genres = []
+            for tid in recent_tracks:
+                info = _fetch_from_content(f"/tracks/{tid}")
+                if info and 'genre' in info:
+                    genres.append(info['genre'])
+            
+            if not genres: return get_top_tracks()
+            
+            fav_genre = Counter(genres).most_common(1)[0][0]
+            print(f"--> Usuario {id_user} prefiere: {fav_genre}")
 
-def get_artist_top_tracks(id_artist):
-    """
-    Canciones más escuchadas de un artista específico.
-    """
-    # ----------------------------------------------------------------------
-    # TODO: CÓDIGO PARA MONGODB (FUTURO)
-    # pipeline = [
-    #     {"$match": {"artist_id": id_artist}},
-    #     {"$group": {"_id": "$track_id", "count": {"$sum": 1}}},
-    #     {"$sort": {"count": -1}}
-    # ]
-    # ----------------------------------------------------------------------
+            # 3. Pedir catálogo y filtrar (HTTP)
+            all_tracks = _fetch_from_content("/tracks")
+            if all_tracks:
+                for t in all_tracks:
+                    if t.get('genre') == fav_genre and t['id'] not in recent_tracks:
+                        recommendations.append(t)
+                        if len(recommendations) >= 5: break
 
-    # FUNCIONALIDAD ACTUAL (MEMORIA):
-    return [
-        Track(id=f"{id_artist}_1", title="Hit 1 Artista"),
-        Track(id=f"{id_artist}_2", title="Hit 2 Artista")
-    ]
+        elif type == 'like':
+             # SQL Colaborativo
+             cur.execute("""
+                SELECT l2.track_id, COUNT(*) as matches
+                FROM likes l1
+                JOIN likes l2 ON l1.user_id = l2.user_id
+                WHERE l1.user_id = %s
+                AND l2.track_id NOT IN (SELECT track_id FROM likes WHERE user_id = %s)
+                GROUP BY l2.track_id
+                ORDER BY matches DESC
+                LIMIT 5
+             """, (id_user, id_user))
+             
+             sim_ids = cur.fetchall()
+             for item in sim_ids:
+                 info = _fetch_from_content(f"/tracks/{item['track_id']}")
+                 if info: recommendations.append(info)
 
+        else:
+            return get_top_tracks()
+            
+    except Exception as e:
+        print(f"Error recomendando: {e}")
+    finally:
+        cur.close()
+        conn.close()
 
-# STUBS RESTANTES (Funciones vacías para completar la interfaz)
-def get_artist_plays(id_artist): return []
+    return recommendations
+
+# ==============================================================================
+#  STUBS REALES
+# ==============================================================================
+def get_user_plays(idUser): 
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("SELECT track_id, timestamp FROM plays WHERE user_id = %s ORDER BY timestamp DESC", (idUser,))
+    data = cur.fetchall()
+    cur.close()
+    conn.close()
+    return data
+
+def get_user_likes(idUser): 
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("SELECT track_id, timestamp FROM likes WHERE user_id = %s", (idUser,))
+    data = cur.fetchall()
+    cur.close()
+    conn.close()
+    return data
+
+def get_artist_plays(idArtist):
+    tracks_data = _fetch_from_content(f"/artists/{idArtist}/tracks")
+    if not tracks_data: return []
+    track_ids = [t['id'] for t in tracks_data]
+    if not track_ids: return [{"artist_id": idArtist, "total_plays": 0}]
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    format_strings = ','.join(['%s'] * len(track_ids))
+    cur.execute(f"SELECT COUNT(*) FROM plays WHERE track_id IN ({format_strings})", tuple(track_ids))
+    total = cur.fetchone()[0]
+    cur.close()
+    conn.close()
+    return [{"artist_id": idArtist, "total_plays": total}]
+
+def get_track_plays(idTrack):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM plays WHERE track_id = %s", (idTrack,))
+    count = cur.fetchone()[0]
+    cur.close()
+    conn.close()
+    return [{"track_id": idTrack, "plays": count}]
+
+def get_track_likes(idTrack):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM likes WHERE track_id = %s", (idTrack,))
+    count = cur.fetchone()[0]
+    cur.close()
+    conn.close()
+    return [{"track_id": idTrack, "likes": count}]
+
+def get_artist_top_tracks(idArtist):
+    tracks_data = _fetch_from_content(f"/artists/{idArtist}/tracks")
+    if not tracks_data: return []
+    track_ids = [t['id'] for t in tracks_data]
+    if not track_ids: return []
+
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    format_strings = ','.join(['%s'] * len(track_ids))
+    cur.execute(f"""
+        SELECT track_id, COUNT(*) as plays
+        FROM plays 
+        WHERE track_id IN ({format_strings})
+        GROUP BY track_id
+        ORDER BY plays DESC
+        LIMIT 5
+    """, tuple(track_ids))
+    ranking = cur.fetchall()
+    cur.close()
+    conn.close()
+    
+    result = []
+    for item in ranking:
+        original_track = next((t for t in tracks_data if t['id'] == item['track_id']), None)
+        if original_track: result.append(original_track)
+    return result

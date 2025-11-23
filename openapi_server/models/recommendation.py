@@ -1,3 +1,5 @@
+# coding: utf-8
+
 from datetime import date, datetime  # noqa: F401
 
 from typing import List, Dict  # noqa: F401
@@ -12,17 +14,17 @@ class Recommendation(Model):
     Do not edit the class manually.
     """
 
-    def __init__(self, user_id=None, track_id=None):  # noqa: E501
+    def __init__(self, user_id: int=None, track_id: int=None):  # noqa: E501
         """Recommendation - a model defined in OpenAPI
 
         :param user_id: The user_id of this Recommendation.  # noqa: E501
-        :type user_id: str
+        :type user_id: int
         :param track_id: The track_id of this Recommendation.  # noqa: E501
-        :type track_id: str
+        :type track_id: int
         """
         self.openapi_types = {
-            'user_id': str,
-            'track_id': str
+            'user_id': int,    # <--- CAMBIO: int
+            'track_id': int    # <--- CAMBIO: int
         }
 
         self.attribute_map = {
@@ -34,7 +36,7 @@ class Recommendation(Model):
         self._track_id = track_id
 
     @classmethod
-    def from_dict(cls, dikt) -> 'Recommendation':
+    def from_dict(cls, dikt: dict) -> 'Recommendation':
         """Returns the dict as a model
 
         :param dikt: A dict.
@@ -45,43 +47,43 @@ class Recommendation(Model):
         return util.deserialize_model(dikt, cls)
 
     @property
-    def user_id(self) -> str:
+    def user_id(self) -> int:
         """Gets the user_id of this Recommendation.
 
 
         :return: The user_id of this Recommendation.
-        :rtype: str
+        :rtype: int
         """
         return self._user_id
 
     @user_id.setter
-    def user_id(self, user_id: str):
+    def user_id(self, user_id: int):
         """Sets the user_id of this Recommendation.
 
 
         :param user_id: The user_id of this Recommendation.
-        :type user_id: str
+        :type user_id: int
         """
 
         self._user_id = user_id
 
     @property
-    def track_id(self) -> str:
+    def track_id(self) -> int:
         """Gets the track_id of this Recommendation.
 
 
         :return: The track_id of this Recommendation.
-        :rtype: str
+        :rtype: int
         """
         return self._track_id
 
     @track_id.setter
-    def track_id(self, track_id: str):
+    def track_id(self, track_id: int):
         """Sets the track_id of this Recommendation.
 
 
         :param track_id: The track_id of this Recommendation.
-        :type track_id: str
+        :type track_id: int
         """
 
         self._track_id = track_id

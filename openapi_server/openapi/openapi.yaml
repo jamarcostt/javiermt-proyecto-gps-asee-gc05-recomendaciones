@@ -1,364 +1,325 @@
 openapi: 3.0.4
 info:
-  description: Registro de reproducciones y likes y generación de recomendaciones
-    y listados personalizados.
   title: Microservicio Recomendaciones
   version: 1.0.0
+  description: Registro de reproducciones, likes y generación de recomendaciones personalizadas.
 servers:
-- url: /
+  - url: /
 tags:
-- description: Recomendaciones personalizadas y métricas de reproducciones y likes.
-  name: recommendations
+  - name: recommendations
+    description: Recomendaciones personalizadas y métricas de reproducciones y likes.
+
 paths:
   /metrics/likes:
     post:
+      summary: Registrar like
       description: Registra un nuevo like de una canción por parte de un usuario.
-      operationId: add_like # <--- Esta será la función en tu controlador Python
+      operationId: add_like
       requestBody:
+        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/like'
-        required: true
       responses:
         "201":
           description: Like registrado correctamente
         "400":
           description: Bad Request (Datos inválidos)
-      summary: Registrar like
       tags:
-      - recommendations
+        - recommendations
       x-openapi-router-controller: openapi_server.controllers.recommendations_controller
+
   /metrics/plays:
     post:
+      summary: Registrar reproducción
       description: Registra una nueva reproducción de una canción por parte de un usuario.
-      operationId: add_play  # <--- Debe coincidir con el nombre de la función en tu controlador Python
+      operationId: add_play
       requestBody:
+        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/play'
-        required: true
       responses:
         "201":
           description: Play registrada correctamente
         "400":
           description: Bad Request (Datos inválidos)
-      summary: Registrar reproducción
       tags:
-      - recommendations
-      x-openapi-router-controller: openapi_server.controllers.recommendations_controller   
+        - recommendations
+      x-openapi-router-controller: openapi_server.controllers.recommendations_controller
+
   /metrics/artists/{idArtist}/plays:
     get:
+      summary: Obtener reproducciones por artista
       description: Devuelve las reproducciones asociadas a un artista.
       operationId: get_artist_plays
       parameters:
-      - explode: false
-        in: path
-        name: idArtist
-        required: true
-        schema:
-          type: string
-        style: simple
+        - name: idArtist
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
       responses:
         "200":
+          description: OK
           content:
             application/json:
               schema:
-                items:
-                  $ref: "#/components/schemas/play"
                 type: array
-          description: OK
+                items:
+                  $ref: '#/components/schemas/play'
         "404":
           description: Not Found
-      summary: Obtener reproducciones por artista
       tags:
-      - recommendations
+        - recommendations
       x-openapi-router-controller: openapi_server.controllers.recommendations_controller
+
   /metrics/tracks/{idTrack}/likes:
     get:
+      summary: Obtener likes por canción
       description: Devuelve los likes de una canción.
       operationId: get_track_likes
       parameters:
-      - explode: false
-        in: path
-        name: idTrack
-        required: true
-        schema:
-          type: string
-        style: simple
+        - name: idTrack
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
       responses:
         "200":
+          description: OK
           content:
             application/json:
               schema:
-                items:
-                  $ref: "#/components/schemas/like"
                 type: array
-          description: OK
+                items:
+                  $ref: '#/components/schemas/like'
         "404":
           description: Not Found
-      summary: Obtener likes por canción
       tags:
-      - recommendations
+        - recommendations
       x-openapi-router-controller: openapi_server.controllers.recommendations_controller
+
   /metrics/tracks/{idTrack}/plays:
     get:
+      summary: Obtener reproducciones por canción
       description: Devuelve las reproducciones de una canción.
       operationId: get_track_plays
       parameters:
-      - explode: false
-        in: path
-        name: idTrack
-        required: true
-        schema:
-          type: string
-        style: simple
+        - name: idTrack
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
       responses:
         "200":
+          description: OK
           content:
             application/json:
               schema:
-                items:
-                  $ref: "#/components/schemas/play"
                 type: array
-          description: OK
+                items:
+                  $ref: '#/components/schemas/play'
         "404":
           description: Not Found
-      summary: Obtener reproducciones por canción
       tags:
-      - recommendations
+        - recommendations
       x-openapi-router-controller: openapi_server.controllers.recommendations_controller
+
   /metrics/users/{idUser}/likes:
     get:
+      summary: Obtener likes de usuario
       description: Devuelve los likes del usuario.
       operationId: get_user_likes
       parameters:
-      - explode: false
-        in: path
-        name: idUser
-        required: true
-        schema:
-          type: string
-        style: simple
+        - name: idUser
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
       responses:
         "200":
+          description: OK
           content:
             application/json:
               schema:
-                items:
-                  $ref: "#/components/schemas/like"
                 type: array
-          description: OK
+                items:
+                  $ref: '#/components/schemas/like'
         "404":
           description: Not Found
-      summary: Obtener likes de usuario
       tags:
-      - recommendations
+        - recommendations
       x-openapi-router-controller: openapi_server.controllers.recommendations_controller
+
   /metrics/users/{idUser}/plays:
     get:
+      summary: Obtener reproducciones de usuario
       description: Devuelve las reproducciones del usuario.
       operationId: get_user_plays
       parameters:
-      - explode: false
-        in: path
-        name: idUser
-        required: true
-        schema:
-          type: string
-        style: simple
+        - name: idUser
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
       responses:
         "200":
+          description: OK
           content:
             application/json:
               schema:
-                items:
-                  $ref: "#/components/schemas/play"
                 type: array
-          description: OK
+                items:
+                  $ref: '#/components/schemas/play'
         "404":
           description: Not Found
-      summary: Obtener reproducciones de usuario
       tags:
-      - recommendations
+        - recommendations
       x-openapi-router-controller: openapi_server.controllers.recommendations_controller
+
   /recommendations/artists/{idArtist}/top-tracks:
     get:
+      summary: Canciones más escuchadas por artista
       description: Devuelve las canciones más escuchadas de un artista.
       operationId: get_artist_top_tracks
       parameters:
-      - explode: false
-        in: path
-        name: idArtist
-        required: true
-        schema:
-          type: string
-        style: simple
+        - name: idArtist
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
       responses:
         "200":
+          description: OK
           content:
             application/json:
               schema:
-                items:
-                  $ref: "#/components/schemas/track"
                 type: array
-          description: OK
+                items:
+                  $ref: '#/components/schemas/track'
         "404":
           description: Not Found
-      summary: Canciones más escuchadas por artista
       tags:
-      - recommendations
+        - recommendations
       x-openapi-router-controller: openapi_server.controllers.recommendations_controller
+
   /recommendations/tracks/top:
     get:
+      summary: Canciones más escuchadas
       description: Devuelve el listado de canciones más escuchadas.
       operationId: get_top_tracks
       responses:
         "200":
+          description: OK
           content:
             application/json:
               schema:
-                items:
-                  $ref: "#/components/schemas/track"
                 type: array
-          description: OK
-      summary: Canciones más escuchadas
+                items:
+                  $ref: '#/components/schemas/track'
       tags:
-      - recommendations
+        - recommendations
       x-openapi-router-controller: openapi_server.controllers.recommendations_controller
+
   /recommendations/users/{idUser}/recommended-tracks:
     get:
-      description: "Devuelve canciones recomendadas para el usuario filtradas por\
-        \ like, género o suscripción."
+      summary: Consultar canciones recomendadas
+      description: Devuelve canciones recomendadas para el usuario filtradas por like, género o suscripción.
       operationId: get_recommended_tracks
       parameters:
-      - explode: false
-        in: path
-        name: idUser
-        required: true
-        schema:
-          type: string
-        style: simple
-      - explode: true
-        in: query
-        name: type
-        required: false
-        schema:
-          enum:
-          - like
-          - genre
-          - subscription
-          type: string
-        style: form
+        - name: idUser
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [like, genre, subscription]
       responses:
         "200":
+          description: OK
           content:
             application/json:
               schema:
-                items:
-                  $ref: "#/components/schemas/track"
                 type: array
-          description: OK
+                items:
+                  $ref: '#/components/schemas/track'
         "404":
           description: Not Found
-      summary: Consultar canciones recomendadas
       tags:
-      - recommendations
+        - recommendations
       x-openapi-router-controller: openapi_server.controllers.recommendations_controller
+
 components:
   schemas:
-    play:
-      example:
-        user_id: usr_001
-        track_id: trk_301
-        id: play_001
-        timestamp: 2025-10-16T20:15:00Z
-      properties:
-        id:
-          example: play_001
-          title: id
-          type: string
-        user_id:
-          example: usr_001
-          title: user_id
-          type: string
-        track_id:
-          example: trk_301
-          title: track_id
-          type: string
-        timestamp:
-          example: 2025-10-16T20:15:00Z
-          title: timestamp
-          type: string
-      title: play
-      type: object
+
     like:
-      example:
-        user_id: usr_001
-        track_id: trk_301
-        id: like_555
-        timestamp: 2025-10-16T20:20:00Z
+      type: object
       properties:
         id:
-          example: like_555
-          title: id
-          type: string
+          type: integer
+          format: int64
+          readOnly: true
         user_id:
-          example: usr_001
-          title: user_id
-          type: string
+          type: integer
+          format: int64
         track_id:
-          example: trk_301
-          title: track_id
-          type: string
+          type: integer
+          format: int64
         timestamp:
-          example: 2025-10-16T20:20:00Z
-          title: timestamp
           type: string
-      title: like
+          format: date-time
+      required:
+        - user_id
+        - track_id
+
+    play:
       type: object
-    track:
-      example:
-        duration: 03:45
-        file_url: https://cdn.musica.com/tracks/de-acero.mp3
-        album_id: alb_101
-        id: trk_301
-        title: De acero
-        published_at: 2025-10-16T20:00:00Z
       properties:
         id:
-          example: trk_301
-          title: id
-          type: string
-        album_id:
-          example: alb_101
-          title: album_id
-          type: string
-        title:
-          example: De acero
-          title: title
-          type: string
-        duration:
-          example: 03:45
-          title: duration
-          type: string
-        file_url:
-          example: https://cdn.musica.com/tracks/de-acero.mp3
-          title: file_url
-          type: string
-        published_at:
-          example: 2025-10-16T20:00:00Z
-          title: published_at
-          type: string
-      title: track
-      type: object
-    recommendation:
-      properties:
+          type: integer
+          format: int64
+          readOnly: true
         user_id:
-          example: usr_001
-          type: string
+          type: integer
+          format: int64
         track_id:
-          example: trk_301
+          type: integer
+          format: int64
+        timestamp:
           type: string
+          format: date-time
+      required:
+        - user_id
+        - track_id
+
+    track:
       type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        artist_id:
+          type: integer
+          format: int64
+        genre:
+          type: string
+      required:
+        - id
+        - name
+        - artist_id

@@ -4,6 +4,7 @@ from psycopg2.extras import RealDictCursor
 import requests
 import os
 from datetime import datetime
+from collections import Counter
 
 # ==============================================================================
 #  CONFIGURACIÓN
@@ -139,69 +140,114 @@ def get_top_tracks():
         
     return result
 
-def get_recommended_tracks(id_user, type=None):
-    """Recomendador Híbrido."""
+def get_recommended_tracks_by_genre(id_user):
+    """
+    Recomendador Content-Based: Basado en el género favorito reciente.
+    """
     conn = get_db_connection()
-    if not conn: return []
+    if not conn: 
+        return []
+    
     cur = conn.cursor(cursor_factory=RealDictCursor)
     recommendations = []
     
     try:
-        if type == 'genre':
-            # 1. Sacar últimas canciones escuchadas (SQL)
-            cur.execute("""
-                SELECT track_id FROM plays 
-                WHERE user_id = %s 
-                ORDER BY timestamp DESC LIMIT 20
-            """, (id_user,))
-            recent_tracks = [row['track_id'] for row in cur.fetchall()]
-            
-            if not recent_tracks: return get_top_tracks()
+        print(f"\n--- [DEBUG] Iniciando get_recommended_tracks_by_genre para user:'{id_user}' ---")
 
-            # 2. Buscar género favorito (HTTP a Contenidos)
-            from collections import Counter
-            genres = []
-            for tid in recent_tracks:
-                info = _fetch_from_content(f"/tracks/{tid}")
-                if info and 'genre' in info:
-                    genres.append(info['genre'])
-            
-            if not genres: return get_top_tracks()
-            
-            fav_genre = Counter(genres).most_common(1)[0][0]
-            print(f"--> Usuario {id_user} prefiere: {fav_genre}")
+        # 1. Sacar últimas canciones escuchadas (SQL)
+        cur.execute("""
+            SELECT track_id FROM plays 
+            WHERE user_id = %s 
+            ORDER BY timestamp DESC LIMIT 20
+        """, (id_user,))
+        recent_tracks = [row['track_id'] for row in cur.fetchall()]
+        
+        if not recent_tracks:
+            print(f"--> [DEBUG] No hay canciones recientes.")
+            return []
 
-            # 3. Pedir catálogo y filtrar (HTTP)
-            all_tracks = _fetch_from_content("/tracks")
-            if all_tracks:
-                for t in all_tracks:
-                    if t.get('genre') == fav_genre and t['id'] not in recent_tracks:
-                        recommendations.append(t)
-                        if len(recommendations) >= 5: break
+        # 2. Buscar género favorito (HTTP a Contenidos)
+        genres = []
+        for tid in recent_tracks:
+            info = _fetch_from_content(f"/tracks/{tid}")
+            if info and 'genre' in info:
+                genres.append(info['genre'])
+        
+        if not genres:
+            print(f"--> [DEBUG] No se pudo determinar género.")
+            return []
+        
+        fav_genre = Counter(genres).most_common(1)[0][0]
+        print(f"--> [DEBUG] Género favorito: '{fav_genre}'")
 
-        elif type == 'like':
-             # SQL Colaborativo
-             cur.execute("""
-                SELECT l2.track_id, COUNT(*) as matches
-                FROM likes l1
-                JOIN likes l2 ON l1.user_id = l2.user_id
-                WHERE l1.user_id = %s
-                AND l2.track_id NOT IN (SELECT track_id FROM likes WHERE user_id = %s)
-                GROUP BY l2.track_id
-                ORDER BY matches DESC
-                LIMIT 5
-             """, (id_user, id_user))
-             
-             sim_ids = cur.fetchall()
-             for item in sim_ids:
-                 info = _fetch_from_content(f"/tracks/{item['track_id']}")
-                 if info: recommendations.append(info)
+        # 3. Pedir catálogo y filtrar (HTTP)
+        all_tracks = _fetch_from_content("/tracks")
+        if all_tracks:
+            for t in all_tracks:
+                # Filtrar: Mismo género Y que no haya escuchado ya
+                if t.get('genre') == fav_genre and t['id'] not in recent_tracks:
+                    recommendations.append(t)
+                    if len(recommendations) >= 5:
+                        break
+        
+        print(f"--> [DEBUG] Recomendaciones por género encontradas: {len(recommendations)}")
 
-        else:
-            return get_top_tracks()
-            
     except Exception as e:
-        print(f"Error recomendando: {e}")
+        print(f"--- [ERROR] Excepción en genre: {e} ---")
+    finally:
+        cur.close()
+        conn.close()
+
+    return recommendations
+
+def get_recommended_tracks_by_like(id_user):
+    """
+    Recomendador Colaborativo: Basado en likes de usuarios similares.
+    Lógica: "A los usuarios que les gustó lo mismo que a ti, también les gustó..."
+    """
+    conn = get_db_connection()
+    if not conn: 
+        return []
+    
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    recommendations = []
+    
+    try:
+        print(f"\n--- [DEBUG] Iniciando get_recommended_tracks_by_like para user:'{id_user}' ---")
+        
+        cur.execute("""
+            SELECT l3.track_id, COUNT(DISTINCT l2.user_id) as matches
+            FROM likes l1
+            JOIN likes l2 ON l1.track_id = l2.track_id 
+            JOIN likes l3 ON l2.user_id = l3.user_id
+            WHERE l1.user_id = %s      -- Filtro: Yo
+            AND l2.user_id != %s       -- Filtro: Que el 'otro' usuario no sea yo mismo
+            AND l3.track_id NOT IN (   -- Filtro: Que no sea una canción que ya me gusta
+                SELECT track_id FROM likes WHERE user_id = %s
+            )
+            GROUP BY l3.track_id
+            ORDER BY matches DESC
+            LIMIT 5
+        """, (id_user, id_user, id_user)) # Nota: Pasamos el ID 3 veces
+        
+        sim_ids = cur.fetchall()
+        
+        if not sim_ids:
+            print(f"--> [DEBUG] No se encontraron coincidencias por likes (o no hay suficientes datos).")
+            return []
+
+        # Enriquecer datos con info de la canción (Microservicio de Contenidos)
+        for item in sim_ids:
+            info = _fetch_from_content(f"/tracks/{item['track_id']}")
+            if info:
+                # Opcional: Agregar el score de coincidencia para debug
+                info['match_score'] = item['matches']
+                recommendations.append(info)
+        
+        print(f"--> [DEBUG] Recomendaciones por like encontradas: {len(recommendations)}")
+
+    except Exception as e:
+        print(f"--- [ERROR] Excepción en like: {e} ---")
     finally:
         cur.close()
         conn.close()

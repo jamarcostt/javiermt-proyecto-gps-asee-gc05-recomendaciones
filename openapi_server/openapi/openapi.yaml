@@ -230,11 +230,14 @@ paths:
         - recommendations
       x-openapi-router-controller: openapi_server.controllers.recommendations_controller
 
-  /recommendations/users/{idUser}/recommended-tracks:
+# -------------------------------------------------------------
+  # NUEVO ENDPOINT 1: Recomendaciones por GÉNERO
+  # -------------------------------------------------------------
+  /recommendations/users/{idUser}/recommended-tracks/genre:
     get:
-      summary: Consultar canciones recomendadas
-      description: Devuelve canciones recomendadas para el usuario filtradas por like, género o suscripción.
-      operationId: get_recommended_tracks
+      summary: Consultar recomendaciones por género
+      description: Devuelve canciones recomendadas basadas en el género favorito reciente.
+      operationId: get_recommended_tracks_by_genre
       parameters:
         - name: idUser
           in: path
@@ -242,12 +245,51 @@ paths:
           schema:
             type: integer
             format: int64
-        - name: type
-          in: query
-          required: false
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/track'
+        "404":
+          description: Not Found
+      tags:
+        - recommendations
+      x-openapi-router-controller: openapi_server.controllers.recommendations_controller
+
+  # -------------------------------------------------------------
+  # NUEVO ENDPOINT 2: Recomendaciones por LIKES (Collaborative)
+  # -------------------------------------------------------------
+  /recommendations/users/{idUser}/recommended-tracks/like:
+    get:
+      summary: Consultar recomendaciones por likes
+      description: Devuelve canciones recomendadas basadas en filtrado colaborativo (likes de otros usuarios).
+      operationId: get_recommended_tracks_by_like
+      parameters:
+        - name: idUser
+          in: path
+          required: true
           schema:
-            type: string
-            enum: [like, genre, subscription]
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/track'
+        "404":
+          description: Not Found
+      tags:
+        - recommendations
+      x-openapi-router-controller: openapi_server.controllers.recommendations_controller
+
       responses:
         "200":
           description: OK

@@ -1,5 +1,6 @@
 import connexion
 import psycopg2
+import jwt
 from psycopg2.extras import RealDictCursor
 import requests
 import os
@@ -11,6 +12,10 @@ from collections import Counter
 # ==============================================================================
 # URL del servicio de Contenidos 
 CONTENT_SERVICE_URL = os.getenv("CONTENT_SERVICE_URL", "http://localhost:8081")
+USER_SERVICE_URL = os.getenv("USER_SERVICE_URL", "http://localhost:8080")
+
+JWT_SECRET = os.getenv("JWT_SECRET", "esta_es_una_clave_secreta_muy_segura_y_larga_12345") 
+
 
 # Parámetros de conexión a la base de datos PostgreSQL
 DB_HOST = os.getenv("DB_HOST", "localhost")
@@ -41,6 +46,61 @@ def _fetch_from_content(endpoint):
             return response.json()
     except Exception as e:
         print(f"--> [ERROR HTTP] Fallo comunicación Contenidos ({endpoint}): {e}")
+    return None
+
+# ==============================================================================
+#  HELPER: SEGURIDAD Y USUARIO
+# ==============================================================================
+def get_current_user_id():
+    """
+    Lee la cookie 'accessToken', decodifica el JWT y resuelve el ID del usuario.
+    """
+    token = connexion.request.cookies.get('accessToken')
+    
+    if not token:
+        print("--> [AUTH] No se encontró cookie 'accessToken'")
+        return None
+
+    try:
+        # 1. Decodificar el Token (sin verificar firma si es red interna confiable, 
+        #    o con verify=True y la misma SECRET_KEY de Java si quieres seguridad total)
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"], options={"verify_signature": True})
+        email = payload.get('sub') # Asumimos que el 'sub' es el email del usuario
+        
+        if not email:
+            print("--> [AUTH] Token decodificado sin 'sub' (email)")
+            return None
+
+        # 2. Como tu DB de recomendaciones usa IDs numéricos, necesitamos traducir Email -> ID.
+        #    Hacemos una llamada a tu servicio de Usuarios (Java) para pedir el ID.
+        #    (Asumiendo que tienes un endpoint /users/search?email=... o similar)
+        #    O si el token ya tuviera el ID en un claim custom, sería más directo.
+        
+        # ESTRATEGIA: Llamamos al servicio de usuarios para buscar por email
+        user_info = _fetch_from_service(USER_SERVICE_URL, f"/users/find?email={email}")
+        
+        if user_info and 'id' in user_info:
+            return user_info['id']
+            
+        print(f"--> [AUTH] No se pudo resolver ID para email: {email}")
+        return None
+
+    except jwt.ExpiredSignatureError:
+        print("--> [AUTH] Token expirado")
+        return None
+    except Exception as e:
+        print(f"--> [AUTH] Error decodificando token: {e}")
+        return None
+
+def _fetch_from_service(base_url, endpoint):
+    """Helper genérico para llamadas HTTP"""
+    try:
+        url = f"{base_url}{endpoint}"
+        response = requests.get(url, timeout=3)
+        if response.status_code == 200:
+            return response.json()
+    except Exception:
+        pass
     return None
 
 # ==============================================================================
@@ -140,6 +200,36 @@ def get_top_tracks():
         result.append(track_data)
         
     return result
+
+# ==============================================================================
+#  ENDPOINTS SEGUROS (MY DATA)
+# ==============================================================================
+
+def get_my_genre_recommendations():
+    """
+    Endpoint para /recommendations/my/genre
+    Obtiene el usuario desde la cookie y llama a la lógica de negocio.
+    """
+    user_id = get_current_user_id()
+    
+    if not user_id:
+        return {"error": "Unauthorized or User not found"}, 401
+        
+    # Reutilizamos tu lógica existente pasando el ID resuelto
+    return get_recommended_tracks_by_genre(user_id)
+
+
+def get_my_like_recommendations():
+    """
+    Endpoint para /recommendations/my/likes
+    Obtiene el usuario desde la cookie y llama a la lógica de negocio.
+    """
+    user_id = get_current_user_id()
+    
+    if not user_id:
+        return {"error": "Unauthorized or User not found"}, 401
+        
+    return get_recommended_tracks_by_like(user_id)
 
 def get_recommended_tracks_by_genre(id_user):
     """

@@ -305,6 +305,52 @@ paths:
         - recommendations
       x-openapi-router-controller: openapi_server.controllers.recommendations_controller
 
+# -------------------------------------------------------------
+  # NUEVOS ENDPOINTS SEGUROS (MY DATA) - COOKIE BASED
+  # -------------------------------------------------------------
+  /recommendations/my/genre:
+    get:
+      summary: Mis recomendaciones por género
+      description: Obtiene recomendaciones basadas en el historial del usuario logueado (detectado por Cookie).
+      operationId: get_my_genre_recommendations
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/track'
+        "401":
+          description: No autorizado (Falta cookie o usuario no encontrado)
+      tags:
+        - recommendations
+      x-openapi-router-controller: openapi_server.controllers.recommendations_controller
+
+  # -------------------------------------------------------------
+  # NUEVOS ENDPOINTS SEGUROS (MY DATA) - COOKIE BASED
+  # -------------------------------------------------------------
+  /recommendations/my/likes:
+    get:
+      summary: Mis recomendaciones por likes
+      description: Obtiene recomendaciones colaborativas para el usuario logueado (detectado por Cookie).
+      operationId: get_my_like_recommendations
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/track'
+        "401":
+          description: No autorizado (Falta cookie o usuario no encontrado)
+      tags:
+        - recommendations
+      x-openapi-router-controller: openapi_server.controllers.recommendations_controller
+
 components:
   schemas:
 

@@ -9,4 +9,4 @@ COPY . .
 
 EXPOSE 8082
 
-CMD ["py", "-m", "openapi_server"]
+CMD ["python", "-m", "openapi_server"]

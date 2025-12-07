@@ -254,7 +254,7 @@ def get_recommended_tracks_by_genre(id_user):
         recent_tracks = [row['track_id'] for row in cur.fetchall()]
         
         if not recent_tracks:
-            print(f"--> [DEBUG] No hay canciones recientes.")
+            print("--> [DEBUG] No hay canciones recientes.")
             return []
 
         # 2. Buscar género favorito (HTTP a Contenidos)
@@ -265,7 +265,7 @@ def get_recommended_tracks_by_genre(id_user):
                 genres.append(info['genre'])
         
         if not genres:
-            print(f"--> [DEBUG] No se pudo determinar género.")
+            print("--> [DEBUG] No se pudo determinar género.")
             return []
         
         fav_genre = Counter(genres).most_common(1)[0][0]
@@ -324,7 +324,7 @@ def get_recommended_tracks_by_like(id_user):
         sim_ids = cur.fetchall()
         
         if not sim_ids:
-            print(f"--> [DEBUG] No se encontraron coincidencias por likes (o no hay suficientes datos).")
+            print("--> [DEBUG] No se encontraron coincidencias por likes (o no hay suficientes datos).")
             return []
 
         # Enriquecer datos con info de la canción (Microservicio de Contenidos)
@@ -348,29 +348,29 @@ def get_recommended_tracks_by_like(id_user):
 # ==============================================================================
 #  STUBS REALES
 # ==============================================================================
-def get_user_plays(idUser): 
+def get_user_plays(id_user): 
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT track_id, timestamp FROM plays WHERE user_id = %s ORDER BY timestamp DESC", (idUser,))
+    cur.execute("SELECT track_id, timestamp FROM plays WHERE user_id = %s ORDER BY timestamp DESC", (id_user,))
     data = cur.fetchall()
     cur.close()
     conn.close()
     return data
 
-def get_user_likes(idUser): 
+def get_user_likes(id_user): 
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT track_id, timestamp FROM likes WHERE user_id = %s", (idUser,))
+    cur.execute("SELECT track_id, timestamp FROM likes WHERE user_id = %s", (id_user,))
     data = cur.fetchall()
     cur.close()
     conn.close()
     return data
 
-def get_artist_plays(idArtist):
-    tracks_data = _fetch_from_content(f"/artists/{idArtist}/tracks")
+def get_artist_plays(id_artist):
+    tracks_data = _fetch_from_content(f"/artists/{id_artist}/tracks")
     if not tracks_data: return []
     track_ids = [t['id'] for t in tracks_data]
-    if not track_ids: return [{"artist_id": idArtist, "total_plays": 0}]
+    if not track_ids: return [{"artist_id": id_artist, "total_plays": 0}]
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -379,25 +379,25 @@ def get_artist_plays(idArtist):
     total = cur.fetchone()[0]
     cur.close()
     conn.close()
-    return [{"artist_id": idArtist, "total_plays": total}]
+    return [{"artist_id": id_artist, "total_plays": total}]
 
-def get_track_plays(idTrack):
+def get_track_plays(id_track):
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM plays WHERE track_id = %s", (idTrack,))
+    cur.execute("SELECT COUNT(*) FROM plays WHERE track_id = %s", (id_track,))
     count = cur.fetchone()[0]
     cur.close()
     conn.close()
-    return [{"track_id": idTrack, "plays": count}]
+    return [{"track_id": id_track, "plays": count}]
 
-def get_track_likes(idTrack):
+def get_track_likes(id_track):
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM likes WHERE track_id = %s", (idTrack,))
+    cur.execute("SELECT COUNT(*) FROM likes WHERE track_id = %s", (id_track,))
     count = cur.fetchone()[0]
     cur.close()
     conn.close()
-    return [{"track_id": idTrack, "likes": count}]
+    return [{"track_id": id_track, "likes": count}]
 
 def get_artist_top_tracks(id_artist):
     tracks_data = _fetch_from_content(f"/artists/{id_artist}/tracks")
